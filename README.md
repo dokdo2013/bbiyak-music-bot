@@ -28,6 +28,10 @@
 4. `python bot.py`
 5. `node bridge.js`
 
+### 해커톤에서의 도메인 연결
+
+Cloudflare Tunnel을 이용해 로컬 Express 서버를 도메인에 연결 (gdg.haenu.dev)
+
 ## 파일별 동작
 ### bot.py
 - 특정 채널 or 스레드에서 올라오는 메시지를 전부 다 catch
