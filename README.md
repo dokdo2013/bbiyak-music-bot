@@ -31,16 +31,16 @@
 ## 파일별 동작
 ### bot.py
 - 특정 채널 or 스레드에서 올라오는 메시지를 전부 다 catch
-  - openai api를 이용해 노래 제목 - 가수명을 추출
-  - 추출한 노래 제목 - 가수명을 youtube data api를 이용해 검색
-  - 검색한 결과를 openai api에 보내 제일 적절한 url 추출
-  - 추출한 url을 redis pub
+- openai api를 이용해 노래 제목 - 가수명을 추출
+- 추출한 노래 제목 - 가수명을 youtube data api를 이용해 검색
+- 검색한 결과를 openai api에 보내 제일 적절한 url 추출
+- 추출한 url을 redis pub
 
-### youtube.js
+### bridge.js
 - redis pub한 url을 sub
 - socket.io를 이용해 index.html로 url 전송
 
-### index.html
+### public/index.html
 - socket.io에서 받은 url을 localstorage에 queue로 저장
 - queue에 저장된 url을 하나씩 iframe으로 띄워줌
 - youtube iframe api를 이용해 큐 순서대로 재생
