@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>YouTube Queue with IFrame Player API</title>
+  <!-- Socket.io CDN -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous"></script>
+
+  <!-- toastr CSS/JS (토스트 메시지용 라이브러리) -->
+  <script src="https://code.jquery.com/jquery-latest.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+
+  <!-- Pretendard -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css" />
+
+  <style>
+    /* toastr 위치를 우측 상단으로 설정 */
+    #toast-container > div {
+      top: 1em !important;
+      right: 1em !important;
+    }
+
+    html, body, * {
+        font-family: 'Pretendard', sans-serif;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- 연결 상태 표시 -->
+  <div id="connected" style="display: none">WS Connected</div>
+  <div id="disconnected">
+    <span>WS Disconnected</span>
+    <button onclick="window.location.reload();">Reload</button>
+  </div>
+
+  <!-- 유튜브 플레이어가 삽입될 div (IFrame Player API가 내부적으로 iframe을 생성) -->
+  <div id="player" style="width: 560px; height: 315px; background-color: #000;"></div>
+
+  <!-- 큐 표시 영역 -->
+  <div id="queue">
+    <h2>Queue</h2>
+    <!-- Next Item 버튼 추가 -->
+    <button onclick="skipItem()">Next Item</button>
+    <ul id="queue-list"></ul>
+  </div>
+
+  <script>
+    // ---------------------------------------------
+    // 1. 전역 변수 및 초기 로직
+    // ---------------------------------------------
+    let player;                      // YT.Player 객체
+    let queue = JSON.parse(localStorage.getItem('videoQueue')) || [];
+    const socket = io();
+    const queueList = document.getElementById('queue-list');
+
+    // toastr 옵션 설정 (원하시면 문구/아이콘 등을 조정해주세요)
+    toastr.options = {
+      "closeButton": false,
+      "debug": false,
+      "newestOnTop": true,
+      "progressBar": true,
+      "positionClass": "toast-top-right",
+      "timeOut": "3000"
+    };
+
+    // ---------------------------------------------
+    // 2. YouTube IFrame API 스크립트 동적 로드
+    // ---------------------------------------------
+    // 스크립트를 로드하면 글로벌 스코프의 onYouTubeIframeAPIReady()를 자동 호출함
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.body.appendChild(tag);
+
+    // ---------------------------------------------
+    // 3. onYouTubeIframeAPIReady - 전역 함수
+    // ---------------------------------------------
+    // IFrame API 준비 완료 시 자동 호출 => 여기서 player를 초기화
+    window.onYouTubeIframeAPIReady = function () {
+      player = new YT.Player('player', {
+        // playerVars 옵션을 통해 재생/컨트롤 바 제어 가능
+        playerVars: {
+          autoplay: 0,  // 자동 재생(1)할지 여부
+          controls: 1,  // 플레이어 컨트롤(재생/일시정지 버튼 등) 표시 여부
+        },
+        events: {
+          onReady: onPlayerReady,
+          onStateChange: onPlayerStateChange,
+        },
+      });
+    };
+
+    // ---------------------------------------------
+    // 4. 플레이어가 준비됐을 때 콜백
+    // ---------------------------------------------
+    function onPlayerReady(event) {
+      console.log('Player is ready!');
+      toastr.success("플레이어가 준비되었습니다!");
+
+      // 큐에 영상이 있으면 첫 영상을 재생
+      if (queue.length > 0) {
+        playNext();
+      }
+    }
+
+    // ---------------------------------------------
+    // 5. 플레이어 상태 변화 콜백
+    // ---------------------------------------------
+    function onPlayerStateChange(event) {
+      // 영상이 끝났다면
+      if (event.data === YT.PlayerState.ENDED) {
+        // 현재 영상 큐에서 제거 후 다음 영상 재생
+        queue.shift();
+        localStorage.setItem('videoQueue', JSON.stringify(queue));
+        updateQueueUI();
+
+        toastr.info("영상이 종료되어 다음 영상으로 넘어갑니다.");
+        playNext();
+      }
+    }
+
+    // ---------------------------------------------
+    // 6. 영상 재생 함수
+    // ---------------------------------------------
+    // 큐에서 첫 영상을 꺼내 재생
+    function playNext() {
+      if (!player || queue.length === 0) return;
+
+      const firstUrl = queue[0];
+      const videoId = extractVideoId(firstUrl);
+
+      // 필요한 경우, startSeconds, endSeconds, quality 등 추가 가능
+      player.loadVideoById(videoId);
+      toastr.info(`다음 영상 재생 중: ${firstUrl}`);
+    }
+
+    // ---------------------------------------------
+    // 7. videoId 추출 유틸 함수 (간단 버전)
+    // ---------------------------------------------
+    // 예: https://www.youtube.com/watch?v=abc123 => abc123
+    //     https://youtu.be/abc123                => abc123
+    //     https://www.youtube.com/embed/abc123   => abc123
+    // 정규식/문자열 파싱 등 방식은 자유롭게 적용
+    function extractVideoId(url) {
+      // 1) watch?v= 형식
+      let match = url.match(/[?&]v=([^&]+)/);
+      if (match && match[1]) {
+        return match[1];
+      }
+      // 2) /embed/ 형식
+      match = url.match(/\/embed\/([^?/]+)/);
+      if (match && match[1]) {
+        return match[1];
+      }
+      // 3) youtu.be/ 형식
+      match = url.match(/youtu\.be\/([^?/]+)/);
+      if (match && match[1]) {
+        return match[1];
+      }
+
+      // 못 찾으면 통째로 반환(기본값)
+      return url;
+    }
+
+    // ---------------------------------------------
+    // 8. UI 업데이트 함수
+    // ---------------------------------------------
+    function updateQueueUI() {
+      queueList.innerHTML = '';
+      queue.forEach((url, index) => {
+        const li = document.createElement('li');
+
+        // 삭제 버튼을 포함한 HTML 생성
+        li.innerHTML = `
+          Video ${index + 1}: ${url}
+          <button onclick="removeFromQueue(${index})">삭제</button>
+        `;
+
+        queueList.appendChild(li);
+      });
+    }
+
+    // (삭제) 버튼 클릭 시 해당 항목을 삭제하는 함수
+    function removeFromQueue(index) {
+      queue.splice(index, 1);
+      localStorage.setItem('videoQueue', JSON.stringify(queue));
+      updateQueueUI();
+      toastr.warning("해당 영상이 큐에서 삭제되었습니다.");
+    }
+
+    // ---------------------------------------------
+    // 9. 소켓 이벤트 핸들러
+    // ---------------------------------------------
+    socket.on('new_video', (url) => {
+      // 새 링크가 들어오면 큐에 추가 후, 비어있었다면 바로 재생
+      queue.push(url);
+      localStorage.setItem('videoQueue', JSON.stringify(queue));
+      updateQueueUI();
+
+      toastr.success("새 영상이 큐에 추가되었습니다.");
+
+      // 플레이어가 준비됐고, 현재 영상이 없는 상태라면 재생
+      if (player && queue.length === 1) {
+        playNext();
+      }
+    });
+
+    socket.on('connect', () => {
+      document.getElementById('connected').style.display = 'block';
+      document.getElementById('disconnected').style.display = 'none';
+      toastr.success("서버와 연결되었습니다!");
+    });
+
+    socket.on('disconnect', () => {
+      document.getElementById('connected').style.display = 'none';
+      document.getElementById('disconnected').style.display = 'block';
+      toastr.error("서버와의 연결이 끊어졌습니다. 재연결을 시도합니다...");
+      console.log('Disconnected from server. Attempting to reconnect...');
+      setTimeout(() => socket.connect(), 3000);
+    });
+
+    // ---------------------------------------------
+    // 10. 페이지 로드 시 초기 설정
+    // ---------------------------------------------
+    updateQueueUI();
+    // 여기서 바로 playNext()를 호출해도 되지만, 실제 플레이어는 onPlayerReady 때 처리
+
+    // ---------------------------------------------
+    // 11. Next Item 버튼용 함수 (현재 재생 중인 영상 넘어가기)
+    // ---------------------------------------------
+    function skipItem() {
+      if (queue.length > 0) {
+        // 현재 재생 중인 항목을 제거한 뒤에 다음 재생
+        queue.shift();
+        localStorage.setItem('videoQueue', JSON.stringify(queue));
+        updateQueueUI();
+        toastr.info("현재 아이템을 스킵하고 다음 영상으로 넘어갑니다.");
+        playNext();
+      } else {
+        toastr.warning("더 이상 재생할 영상이 없습니다.");
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:latest
+    container_name: redis_local
+    ports:
+      - "6379:6379" # Redis 기본 포트
+    volumes:
+      - redis_data:/data # 데이터 영구 저장
+    command: ["redis-server", "--appendonly", "yes"] # 데이터 영구 저장 활성화
+
+volumes:
+  redis_data:
+    driver: local
