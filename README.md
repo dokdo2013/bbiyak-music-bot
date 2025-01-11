@@ -16,6 +16,8 @@
     - `BOT_TOKEN`: 디스코드 봇 토큰
     - `OPENAI_API_KEY`: openai api 키
     - `THREAD_IDS`: 디스코드 스레드 id (comma separated)
+    - `SERVICE_ACCOUNT_FILE_PATH` : Youtube Data Api 호출을 위한 service account json 경로
+    - `GOOGLE_API_KEY` : GCP API Key
   - `sa.json`
     - Youtube Data Api 호출을 위한 service account json 
 
