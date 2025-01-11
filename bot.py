@@ -144,7 +144,7 @@ def handle_message(message):
         url = f"노래를 찾을 수 없습니다. 다른 키워드로 다시 시도해주세요! :cry:"
         isSuccess = False
 
-    return isSuccess, url
+    return isSuccess, url, song_info
 
 
 
@@ -172,25 +172,31 @@ thread_ids = [int(thread_id) for thread_id in thread_ids_string.split(",")]
 async def on_message(message):
     # 메시지가 대상 스레드에서 왔는지 확인
     # if message.channel.id == TARGET_THREAD_ID:
-    if message.channel.id in thread_ids:
+    if message.channel.id in thread_ids and message.channel.name == '신청곡 받습니당':
         print(f"New message in thread '{message.channel.name}': {message.content}")
 
     # 봇 자신의 메시지는 무시
     if message.author == bot.user:
         return
 
-    isSuccess, url = handle_message(message.content)
+    isSuccess, url, song_info = handle_message(message.content)
     # isSuccess = True
     # url = 'https://www.youtube.com/watch?v=gdZLi9oWNZg'
 
     if isSuccess:
         # Redis Pub
+        message_obj = {
+            "song_info": song_info,
+            "url": url
+        }
         redis_client.publish('bbybby', url)
+        # redis_client.publish('bbybby', json.dumps(message_obj))
 
         send_message = f"노래가 추가되었어요 (url : {url})"
         await message.channel.send(send_message)
     else:
         await message.channel.send(url)
+        pass
 
 
 # 봇 실행
