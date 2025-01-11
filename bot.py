@@ -14,7 +14,7 @@ client = OpenAI(api_key=openai_api_key)
 # Redis 설정
 redis_client = redis.StrictRedis(host='localhost', port=6379, decode_responses=True)
 
-SERVICE_ACCOUNT_FILE = "sa.json"
+SERVICE_ACCOUNT_FILE = os.getenv("SERVICE_ACCOUNT_FILE_PATH")
 REDIS_CHANNEL_ID = 'bbybby'
 
 # YouTube Data API 인증
@@ -68,7 +68,7 @@ def select_best_video(videos, song_info):
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "developer", "content": f"다음은 '{song_info}'에 대한 YouTube 검색 결과입니다. 가장 적합한 영상 URL만 반환해주세요. 만일 가장 적합한 URL이 없으면 'NONE'을 리턴하세요."},
+            {"role": "developer", "content": f"다음은 '{song_info}'에 대한 YouTube 검색 결과입니다. 가장 적합한 영상 URL만 반환해주세요. 또한 Special Clip이 들어가는 건 지양해줘. 그리고 차근차근히 찾아봤는데 만일 가장 적합한 URL이 없으면 'NONE'을 해줘. 그리고 'NONE' 이랑 URL을 제외한 어떠한 메세지도 나오면 안돼"},
             {
                 "role": "user",
                 "content": json.dumps(videos),
@@ -102,7 +102,7 @@ def get_song_info(message):
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "developer", "content": "제공되는 메시지에서 노래 제목과 가수명을 찾아줘. 만일 노래 제목과 가수명을 찾을 수 없으면 'none'을 return하고, 노래 제목과 가수명이 있으면 '<노래제목> - <가수명>' 형식으로 return해줘. (e.g. 'Dynamite - 방탄소년단')"},
+            {"role": "developer", "content": "제공되는 메시지에서 노래 제목과 가수명을 찾아줘. 만일 노래 제목과 가수명으로 인식되지는 않지만, hyphen으로 구분되어 텍스트가 제공되면 노래 제목과 가수명으로 간주해도 좋아. 만일 노래 제목과 가수명을 찾을 수 없으면 'none'을 return하고, 노래 제목과 가수명이 있으면 '<노래제목> - <가수명>' 형식으로 return해줘. (e.g. 'Dynamite - 방탄소년단')"},
             {
                 "role": "user",
                 "content": message,
@@ -144,7 +144,7 @@ def handle_message(message):
         url = f"노래를 찾을 수 없습니다. 다른 키워드로 다시 시도해주세요! :cry:"
         isSuccess = False
 
-    return isSuccess, url, song_info
+    return isSuccess, url
 
 
 
@@ -171,26 +171,21 @@ thread_ids = [int(thread_id) for thread_id in thread_ids_string.split(",")]
 @bot.event
 async def on_message(message):
     # 메시지가 대상 스레드에서 왔는지 확인
-    # if message.channel.id == TARGET_THREAD_ID:
     if message.channel.id in thread_ids and message.channel.name == '신청곡 받습니당':
         print(f"New message in thread '{message.channel.name}': {message.content}")
+    else:
+        print('Ignore')
+        return
 
     # 봇 자신의 메시지는 무시
     if message.author == bot.user:
         return
 
-    isSuccess, url, song_info = handle_message(message.content)
-    # isSuccess = True
-    # url = 'https://www.youtube.com/watch?v=gdZLi9oWNZg'
+    isSuccess, url = handle_message(message.content)
 
     if isSuccess:
         # Redis Pub
-        message_obj = {
-            "song_info": song_info,
-            "url": url
-        }
         redis_client.publish('bbybby', url)
-        # redis_client.publish('bbybby', json.dumps(message_obj))
 
         send_message = f"노래가 추가되었어요 (url : {url})"
         await message.channel.send(send_message)
