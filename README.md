@@ -43,8 +43,11 @@ Cloudflare Tunnel을 이용해 로컬 Express 서버를 도메인에 연결 (gdg
 ### bridge.js
 - redis pub한 url을 sub
 - socket.io를 이용해 index.html로 url 전송
+- 정적 파일 서빙 (index.html)
+- youtube url이 주어졌을 때 Youtube Data API를 통해 영상 제목을 추출하는 API 제공
 
 ### public/index.html
 - socket.io에서 받은 url을 localstorage에 queue로 저장
 - queue에 저장된 url을 하나씩 iframe으로 띄워줌
 - youtube iframe api를 이용해 큐 순서대로 재생
+- 화면에 표시되는 영상 제목은 bridge.js의 API 호출을 통해 가져옴
